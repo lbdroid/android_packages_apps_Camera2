@@ -944,7 +944,11 @@ public class PhotoModule
             if(mSnapshotMode == CameraInfo.CAMERA_SUPPORT_MODE_ZSL) {
                 Log.v(TAG, "JpegPictureCallback : in zslmode");
                 mParameters = mCameraDevice.getParameters();
-                mBurstSnapNum = mParameters.getInt("num-snaps-per-shutter");
+                if (CameraUtil.isBurstSupported(mParameters)) {
+                    mBurstSnapNum = mParameters.getInt("num-snaps-per-shutter");
+                } else {
+                    mBurstSnapNum = 1;
+                }
             }
             Log.v(TAG, "JpegPictureCallback: Received = " + mReceivedSnapNum +
                       "Burst count = " + mBurstSnapNum);
@@ -1262,7 +1266,11 @@ public class PhotoModule
         mCameraDevice.setParameters(mParameters);
         mParameters = mCameraDevice.getParameters();
 
-        mBurstSnapNum = mParameters.getInt("num-snaps-per-shutter");
+        if (CameraUtil.isBurstSupported(mParameters)) {
+            mBurstSnapNum = mParameters.getInt("num-snaps-per-shutter");
+        } else {
+            mBurstSnapNum = 1;
+        }
         mReceivedSnapNum = 0;
 
         // We don't want user to press the button again while taking a
@@ -1867,6 +1875,9 @@ public class PhotoModule
                 }
                 return true;
         case KeyEvent.KEYCODE_DPAD_LEFT:
+            if (!CameraUtil.isSupported(mParameters, "luma-adaptation")) {
+                break;
+            }
             if ( (mCameraState != PREVIEW_STOPPED) &&
                   (mFocusManager.getCurrentFocusState() != mFocusManager.STATE_FOCUSING) &&
                   (mFocusManager.getCurrentFocusState() != mFocusManager.STATE_FOCUSING_SNAP_ON_FINISH) ) {
@@ -1882,6 +1893,9 @@ public class PhotoModule
             }
             break;
            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            if (!CameraUtil.isSupported(mParameters, "luma-adaptation")) {
+                break;
+            }
             if ( (mCameraState != PREVIEW_STOPPED) &&
                   (mFocusManager.getCurrentFocusState() != mFocusManager.STATE_FOCUSING) &&
                   (mFocusManager.getCurrentFocusState() != mFocusManager.STATE_FOCUSING_SNAP_ON_FINISH) ) {
@@ -2160,32 +2174,38 @@ public class PhotoModule
             mParameters.setColorEffect(colorEffect);
         }
         //Set Saturation
-        String saturationStr = mPreferences.getString(
-                CameraSettings.KEY_SATURATION,
-                mActivity.getString(R.string.pref_camera_saturation_default));
-        int saturation = Integer.parseInt(saturationStr);
-        Log.v(TAG, "Saturation value =" + saturation);
-        if((0 <= saturation) && (saturation <= mParameters.getMaxSaturation())){
-            mParameters.setSaturation(saturation);
+        if (CameraUtil.isSupported(mParameters, "saturation")) {
+            String saturationStr = mPreferences.getString(
+                    CameraSettings.KEY_SATURATION,
+                    mActivity.getString(R.string.pref_camera_saturation_default));
+            int saturation = Integer.parseInt(saturationStr);
+            Log.v(TAG, "Saturation value =" + saturation);
+            if((0 <= saturation) && (saturation <= mParameters.getMaxSaturation())){
+                mParameters.setSaturation(saturation);
+            }
         }
         // Set contrast parameter.
-        String contrastStr = mPreferences.getString(
-                CameraSettings.KEY_CONTRAST,
-                mActivity.getString(R.string.pref_camera_contrast_default));
-        int contrast = Integer.parseInt(contrastStr);
-        Log.v(TAG, "Contrast value =" +contrast);
-        if((0 <= contrast) && (contrast <= mParameters.getMaxContrast())){
-            mParameters.setContrast(contrast);
+        if (CameraUtil.isSupported(mParameters, "contrast")) {
+            String contrastStr = mPreferences.getString(
+                    CameraSettings.KEY_CONTRAST,
+                    mActivity.getString(R.string.pref_camera_contrast_default));
+            int contrast = Integer.parseInt(contrastStr);
+            Log.v(TAG, "Contrast value =" + contrast);
+            if ((0 <= contrast) && (contrast <= mParameters.getMaxContrast())) {
+                mParameters.setContrast(contrast);
+            }
         }
         // Set sharpness parameter
-        String sharpnessStr = mPreferences.getString(
-                CameraSettings.KEY_SHARPNESS,
-                mActivity.getString(R.string.pref_camera_sharpness_default));
-        int sharpness = Integer.parseInt(sharpnessStr) *
-                (mParameters.getMaxSharpness()/MAX_SHARPNESS_LEVEL);
-        Log.v(TAG, "Sharpness value =" + sharpness);
-        if((0 <= sharpness) && (sharpness <= mParameters.getMaxSharpness())){
-            mParameters.setSharpness(sharpness);
+        if (CameraUtil.isSupported(mParameters, "sharpness")) {
+            String sharpnessStr = mPreferences.getString(
+                    CameraSettings.KEY_SHARPNESS,
+                    mActivity.getString(R.string.pref_camera_sharpness_default));
+            int sharpness = Integer.parseInt(sharpnessStr) *
+                    (mParameters.getMaxSharpness() / MAX_SHARPNESS_LEVEL);
+            Log.v(TAG, "Sharpness value =" + sharpness);
+            if ((0 <= sharpness) && (sharpness <= mParameters.getMaxSharpness())) {
+                mParameters.setSharpness(sharpness);
+            }
         }
         // Set Face Recognition
         String faceRC = mPreferences.getString(
@@ -2570,7 +2590,8 @@ public class PhotoModule
             doModeSwitch = updateCameraParametersPreference();
         }
 
-        Util.dumpParameters(mParameters);
+        CameraUtil.dumpParameters(mParameters);
+
         mCameraDevice.setParameters(mParameters);
 
         // Switch to gcam module if HDR+ was selected
@@ -2891,8 +2912,9 @@ public class PhotoModule
         editor.putString(CameraSettings.KEY_SKIN_TONE_ENHANCEMENT_FACTOR,
             Integer.toString(mskinToneValue - MIN_SCE_FACTOR));
         editor.apply();
-        if(brightnessProgressBar != null)
+        if(brightnessProgressBar != null && CameraUtil.isSupported(mParameters, "luma-adaptation")) {
              brightnessProgressBar.setVisibility(View.VISIBLE);
+        }
 }
 
 /*
@@ -2974,8 +2996,6 @@ class GraphView extends View {
     private CameraManager.CameraProxy mGraphCameraDevice;
     private float scaled;
     private static final int STATS_SIZE = 256;
-    private static final String TAG = "GraphView";
-
 
     public GraphView(Context context, AttributeSet attrs) {
         super(context,attrs);
@@ -2994,9 +3014,7 @@ class GraphView extends View {
     }
     @Override
     protected void onDraw(Canvas canvas) {
-        Log.v(TAG, "in Camera.java ondraw");
         if(mPhotoModule == null || !mPhotoModule.mHiston ) {
-            Log.e(TAG, "returning as histogram is off ");
             return;
         }
 
